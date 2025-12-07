@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 import os
 import gradio as gr
 
+# Load API Key
 load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
 
+# System prompt for Einstein
 system_prompt = """
 You are Albert Einstein —
 Answer questions through Einstein's reasoning and curiosity.
@@ -17,12 +19,14 @@ even if the user does not ask for them.
 Respond humorously when appropriate. Keep answers 2–6 sentences.
 """
 
+# Initialize LLM
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     google_api_key=gemini_key,
     temperature=0.5
 )
 
+# LangChain prompt
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
     MessagesPlaceholder(variable_name="history"),
@@ -32,44 +36,44 @@ prompt = ChatPromptTemplate.from_messages([
 chain = prompt | llm | StrOutputParser()
 
 
-def chat(user_in, hist):
-    # Convert Gradio history → LangChain history
+# Chat function
+def chat(user_in, history):
+    # Convert Gradio dict-history → LangChain history
     langchain_history = []
-    for item in hist:
+    for item in history:
         if item["role"] == "user":
             langchain_history.append(HumanMessage(content=item["content"]))
         else:
             langchain_history.append(AIMessage(content=item["content"]))
 
-    # Invoke LLM
+    # Get LLM response
     response = chain.invoke({
         "input": user_in,
         "history": langchain_history
     })
 
-    # Update chat history
-    new_hist = hist + [
-        {'role': 'user', 'content': user_in},
-        {'role': 'assistant', 'content': response}
-    ]
+    # Append new messages in dict format
+    history.append({"role": "user", "content": user_in})
+    history.append({"role": "assistant", "content": response})
 
-    return "", new_hist
+    return "", history
 
 
-# Build Gradio UI
-with gr.Blocks(title="Albert Einstein Chat Bot", theme=gr.themes.Soft()) as page:
+# -------------------- Gradio UI --------------------
+with gr.Blocks(title="Albert Einstein Chat Bot") as page:
 
     gr.Markdown("""
-    # Chat with Albert Einstein  
+    # 💬 Chat with Albert Einstein  
     Welcome to your personal conversation with Albert Einstein!
     """)
 
-    chat_window = gr.Chatbot(type='messages')
+    chat_window = gr.Chatbot(avatar_images=[None, "einstein.png"], show_label=False)
     msg = gr.Textbox(placeholder="Ask Albert Einstein anything...", label="Your Message")
 
     msg.submit(chat, inputs=[msg, chat_window], outputs=[msg, chat_window])
 
     clear = gr.Button("Clear Chat")
-    clear.click(lambda: (None, []), None, [msg, chat_window])
+    clear.click(lambda: ("", []), None, [msg, chat_window])
 
+# Disable share=True to avoid timeout errors
 page.launch(share=True)
